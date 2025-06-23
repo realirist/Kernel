@@ -15,7 +15,8 @@ const getBrowserHeaders = () => ({
   'Accept-Language': 'en-US,en;q=0.9',
   'DNT': '1',
   'Connection': 'keep-alive',
-  'Cache-Control': 'max-age=0'
+  'Cache-Control': 'max-age=0',
+  'Accept-Encoding': 'identity'
 });
 
 const cache = new Map();
