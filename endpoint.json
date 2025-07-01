@@ -1,0 +1,10 @@
+{
+  "global": {
+    "changelogs": " [ + ] Added hookfunction",
+    "inservice": ["windows"]
+  },
+  "windows": {
+    "product": "Kernel",
+    "exploit_version": "2.0",
+    "roblox_version": "version-78712d8739f34cb9"
+}
