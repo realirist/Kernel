@@ -178,8 +178,8 @@
             </div>
             <div class="card">
                 <h3>Functions</h3>
-                <p>Has functions commonly found in exploits ingame, simulating them without the risk of bans. Total sUNC
-                    is 71%. Links to the scrap on rubis:
+                <p id="funcs_paragraph">Has functions commonly found in exploits ingame, simulating them without the risk of bans. Total sUNC
+                    is GOTTEN_PERCENT%. Links to the scrap on rubis:
                     <br><a href="https://rubis.app/view/?scrap=AdbtZX2pP9CxpyTD">sUNC (v1)</a>
                 </p>
             </div>
@@ -192,6 +192,22 @@
     <footer>
         <p>Kernel | Game: <a href="https://www.roblox.com/games/107411491460392/Kernel">Kernel</a></p>
     </footer>
+    <script>
+        (()=>{
+            fetch("https://api.rubis.app/v2/scrap/AdbtZX2pP9CxpyTD/raw")
+  .then(response => response.json())
+  .then((results) => {
+    let passed = Object.keys(results.tests.passed).length;
+    let failed = Object.keys(results.tests.failed).length;
+    let total = passed + failed;
+
+    let passedPercent = Math.round((passed / total) * 100);
+    const funcs_paragraph = document.getElementById("funcs_paragraph");
+      funcs_paragraph.innerHTML = funcs_paragraph.innerHTML.replace("GOTTEN_PERCENT", passedPercent.toString())
+  });
+
+})()
+    </script>
 </body>
 
 </html>
