@@ -202,6 +202,39 @@ app.put('/proxy/websockets', (req, res) => {
   }
 });
 
+// WebSocket connection closing endpoint - DELETE to close connection
+app.delete('/proxy/websockets', (req, res) => {
+  try {
+    const { uuid } = req.body;
+    
+    if (!uuid) {
+      return res.status(400).json({ error: 'Missing "uuid" in request body' });
+    }
+    
+    // Check if WebSocket connection exists
+    if (!activeWebSockets.has(uuid)) {
+      return res.status(404).json({ error: 'WebSocket connection not found' });
+    }
+    
+    const targetWs = activeWebSockets.get(uuid);
+    
+    // Close the WebSocket connection
+    if (targetWs.readyState === WebSocket.OPEN) {
+      targetWs.close();
+      console.log(`WebSocket connection ${uuid} closed by client request`);
+    }
+    
+    // Remove from active connections (cleanup will be handled by the close event)
+    activeWebSockets.delete(uuid);
+    
+    res.json({ success: true, message: 'WebSocket connection closed successfully' });
+    
+  } catch (error) {
+    console.error(`WebSocket close error: ${error.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const handleWebSocketConnection = (targetWs, uuid) => {
   let messageQueue = [];
   let isProcessingQueue = false;
