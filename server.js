@@ -4,6 +4,16 @@ const net = require("net");
 const { URL } = require("url");
 const AbortController = require("abort-controller");
 
+// For Node.js < 18, you might need to install node-fetch
+// npm install node-fetch@2
+// const fetch = require('node-fetch');
+// const { Headers } = require('node-fetch');
+
+// For Node.js >= 18, fetch is built-in but might need to be imported
+// const { fetch, Headers } = require('node-fetch'); // if using node-fetch
+// or for Node 18+:
+// global.fetch = fetch; // if fetch isn't global
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -109,14 +119,14 @@ app.all("/proxy", async (req, res) => {
     }
     
     const browserHeaders = getBrowserHeaders();
-    const forwardHeaders = new fetch.Headers();
-    Object.entries(browserHeaders).forEach(([k, v]) => forwardHeaders.set(k, v));
-    Object.entries(clientHeaders).forEach(([k, v]) => forwardHeaders.set(k, v));
+    const forwardHeaders = {};
+    Object.entries(browserHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
+    Object.entries(clientHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
     
     let fetchBody = null;
     if (!["GET", "HEAD"].includes(upperMethod) && clientBody !== undefined) {
       fetchBody = typeof clientBody === "object" ? JSON.stringify(clientBody) : clientBody.toString();
-      if (!forwardHeaders.has("Content-Type")) forwardHeaders.set("Content-Type", "application/json");
+      if (!forwardHeaders["Content-Type"]) forwardHeaders["Content-Type"] = "application/json";
     }
     
     const controller = new AbortController();
