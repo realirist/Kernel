@@ -156,19 +156,16 @@ app.all("/proxy", async (req, res) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     
     if (upperMethod === "GET") {
-      const chunks = [];
-      fetchResponse.body.on("data", chunk => chunks.push(chunk));
-      fetchResponse.body.on("end", () => {
-        const fullBody = Buffer.concat(chunks);
-        cache.set(url, {
-          status: fetchResponse.status,
-          headers: Object.fromEntries(fetchResponse.headers.entries()),
-          body: fullBody,
-        });
+      const buffer = await fetchResponse.buffer();
+      cache.set(url, {
+        status: fetchResponse.status,
+        headers: Object.fromEntries(fetchResponse.headers.entries()),
+        body: buffer,
       });
-      fetchResponse.body.pipe(res);
+      res.send(buffer);
     } else {
-      fetchResponse.body.pipe(res);
+      const buffer = await fetchResponse.buffer();
+      res.send(buffer);
     }
     
   } catch (err) {
