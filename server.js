@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const net = require("net");
 const { URL } = require("url");
+const WebSocket = require("ws");
+const http = require("http");
+const crypto = require("crypto");
 
 // Use native AbortController if available (Node 16+), otherwise use polyfill
 const AbortController = globalThis.AbortController || require("abort-controller");
@@ -17,7 +20,11 @@ const AbortController = globalThis.AbortController || require("abort-controller"
 // global.fetch = fetch; // if fetch isn't global
 
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
 const PORT = process.env.PORT || 3000;
+const FIREBASE_URL = "https://kernel-websockets-default-rtdb.firebaseio.com/websockets.json";
 
 app.use(cors());
 app.use(express.json());
@@ -34,6 +41,199 @@ const getBrowserHeaders = () => ({
 });
 
 const cache = new Map();
+
+// Generate UUID for WebSocket connections
+const generateWebSocketUUID = () => {
+  const randomPart = () => {
+    const num = Math.floor(Math.random() * 4294967296); // 0-4294967295
+    return num.toString(16).padStart(8, '0');
+  };
+  
+  return `UUID-WS-${randomPart()}-${randomPart()}-${randomPart()}-${randomPart()}`;
+};
+
+// Firebase operations
+const updateFirebase = async (uuid, value) => {
+  try {
+    const response = await fetch(`${FIREBASE_URL}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        [uuid]: value
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Firebase update failed: ${response.status}`);
+    }
+    
+    console.log(`Firebase updated: ${uuid} = ${value}`);
+  } catch (error) {
+    console.error(`Firebase update error for ${uuid}:`, error.message);
+  }
+};
+
+const waitForFirebaseNull = async (uuid) => {
+  const checkInterval = 1000; // Check every second
+  const maxAttempts = 300; // 5 minutes maximum
+  let attempts = 0;
+  
+  return new Promise((resolve) => {
+    const checkFirebase = async () => {
+      try {
+        attempts++;
+        const response = await fetch(`${FIREBASE_URL}`);
+        const data = await response.json();
+        
+        if (!data || data[uuid] === null || data[uuid] === undefined) {
+          console.log(`Firebase ${uuid} is null, resolving`);
+          resolve();
+          return;
+        }
+        
+        if (attempts >= maxAttempts) {
+          console.log(`Firebase ${uuid} timeout after ${maxAttempts} attempts`);
+          resolve();
+          return;
+        }
+        
+        setTimeout(checkFirebase, checkInterval);
+      } catch (error) {
+        console.error(`Firebase check error for ${uuid}:`, error.message);
+        resolve();
+      }
+    };
+    
+    checkFirebase();
+  });
+};
+
+// WebSocket proxy handling
+const handleWebSocketProxy = (ws, targetUrl) => {
+  const uuid = generateWebSocketUUID();
+  console.log(`New WebSocket connection: ${uuid} -> ${targetUrl}`);
+  
+  let targetWs;
+  let messageQueue = [];
+  let isProcessingQueue = false;
+  
+  const cleanup = async () => {
+    console.log(`Cleaning up WebSocket ${uuid}`);
+    
+    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+      targetWs.close();
+    }
+    
+    // Set Firebase to null when closing
+    await updateFirebase(uuid, null);
+  };
+  
+  const processMessageQueue = async () => {
+    if (isProcessingQueue || messageQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    
+    while (messageQueue.length > 0) {
+      const message = messageQueue.shift();
+      
+      // Generate random hex value
+      const randomValue = Math.floor(Math.random() * 4294967296).toString(16);
+      
+      // Update Firebase with the message data
+      await updateFirebase(uuid, randomValue);
+      
+      // Wait for Firebase to be set to null
+      await waitForFirebaseNull(uuid);
+      
+      // Forward the message to target WebSocket
+      if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+        targetWs.send(message);
+      }
+    }
+    
+    isProcessingQueue = false;
+  };
+  
+  // Connect to target WebSocket
+  try {
+    targetWs = new WebSocket(targetUrl);
+    
+    targetWs.on('open', () => {
+      console.log(`Connected to target WebSocket: ${targetUrl}`);
+    });
+    
+    targetWs.on('message', (data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    });
+    
+    targetWs.on('close', () => {
+      console.log(`Target WebSocket closed: ${targetUrl}`);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+      cleanup();
+    });
+    
+    targetWs.on('error', (error) => {
+      console.error(`Target WebSocket error: ${error.message}`);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+      cleanup();
+    });
+    
+  } catch (error) {
+    console.error(`Failed to connect to target WebSocket: ${error.message}`);
+    ws.close();
+    cleanup();
+    return;
+  }
+  
+  // Handle messages from client
+  ws.on('message', async (data) => {
+    messageQueue.push(data);
+    processMessageQueue();
+  });
+  
+  ws.on('close', () => {
+    console.log(`Client WebSocket closed: ${uuid}`);
+    cleanup();
+  });
+  
+  ws.on('error', (error) => {
+    console.error(`Client WebSocket error: ${error.message}`);
+    cleanup();
+  });
+};
+
+// WebSocket server
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const targetUrl = url.searchParams.get('target');
+  
+  if (!targetUrl) {
+    console.log('WebSocket connection without target URL');
+    ws.close(1008, 'Missing target URL parameter');
+    return;
+  }
+  
+  try {
+    // Validate target URL
+    new URL(targetUrl);
+    if (!targetUrl.startsWith('ws://') && !targetUrl.startsWith('wss://')) {
+      throw new Error('Invalid WebSocket URL scheme');
+    }
+    
+    handleWebSocketProxy(ws, targetUrl);
+  } catch (error) {
+    console.error(`Invalid target URL: ${error.message}`);
+    ws.close(1008, 'Invalid target URL');
+  }
+});
 
 // Handle CONNECT method for HTTP tunneling
 const handleConnect = (req, res, target) => {
@@ -189,8 +389,9 @@ app.all("/proxy", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Hella fast proxy running on port ${PORT}`);
   console.log(`Ready for Fiddler Everywhere integration`);
-  console.log(`Supports: GET, POST, PUT, DELETE, OPTIONS, CONNECT`);
+  console.log(`Supports: GET, POST, PUT, DELETE, OPTIONS, CONNECT, WebSocket`);
+  console.log(`WebSocket usage: ws://localhost:${PORT}/?target=ws://example.com/websocket`);
 });
