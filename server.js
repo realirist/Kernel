@@ -2,7 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const net = require("net");
 const { URL } = require("url");
-const AbortController = require("abort-controller");
+
+// Use native AbortController if available (Node 16+), otherwise use polyfill
+const AbortController = globalThis.AbortController || require("abort-controller");
 
 // For Node.js < 18, you might need to install node-fetch
 // npm install node-fetch@2
