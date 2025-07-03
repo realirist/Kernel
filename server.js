@@ -42,6 +42,9 @@ const getBrowserHeaders = () => ({
 
 const cache = new Map();
 
+// Store active WebSocket connections by UUID
+const activeWebSockets = new Map();
+
 // Generate UUID for WebSocket connections
 const generateWebSocketUUID = () => {
   const randomPart = () => {
@@ -152,12 +155,65 @@ app.post('/proxy/websocket', (req, res) => {
   }
 });
 
+// WebSocket message sending endpoint - PUT to send message
+app.put('/proxy/websockets', (req, res) => {
+  try {
+    const { uuid, message } = req.body;
+    
+    if (!uuid) {
+      return res.status(400).json({ error: 'Missing "uuid" in request body' });
+    }
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Missing "message" in request body' });
+    }
+    
+    // Check if WebSocket connection exists
+    if (!activeWebSockets.has(uuid)) {
+      return res.status(404).json({ error: 'WebSocket connection not found' });
+    }
+    
+    const targetWs = activeWebSockets.get(uuid);
+    
+    // Check if WebSocket is still open
+    if (targetWs.readyState !== WebSocket.OPEN) {
+      activeWebSockets.delete(uuid);
+      return res.status(400).json({ error: 'WebSocket connection is not open' });
+    }
+    
+    try {
+      // Decode base64 message
+      const decodedMessage = Buffer.from(message, 'base64');
+      
+      // Send raw message to WebSocket
+      targetWs.send(decodedMessage);
+      
+      console.log(`Message sent to WebSocket ${uuid}`);
+      res.json({ success: true, message: 'Message sent successfully' });
+      
+    } catch (decodeError) {
+      console.error(`Failed to decode message for ${uuid}:`, decodeError.message);
+      res.status(400).json({ error: 'Invalid base64 message' });
+    }
+    
+  } catch (error) {
+    console.error(`WebSocket send error: ${error.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const handleWebSocketConnection = (targetWs, uuid) => {
   let messageQueue = [];
   let isProcessingQueue = false;
   
+  // Store the WebSocket connection
+  activeWebSockets.set(uuid, targetWs);
+  
   const cleanup = async () => {
     console.log(`Cleaning up WebSocket ${uuid}`);
+    
+    // Remove from active connections
+    activeWebSockets.delete(uuid);
     
     if (targetWs && targetWs.readyState === WebSocket.OPEN) {
       targetWs.close();
@@ -372,6 +428,8 @@ server.listen(PORT, () => {
   console.log(`Hella fast proxy running on port ${PORT}`);
   console.log(`Ready for Fiddler Everywhere integration`);
   console.log(`Supports: GET, POST, PUT, DELETE, OPTIONS, CONNECT, WebSocket`);
-  console.log(`WebSocket usage: POST /proxy/websocket with {"url": "ws://example.com"}`);
-  console.log(`Messages will be queued to Firebase at /websockets/{uuid} as base64`);
+  console.log(`WebSocket usage:`);
+  console.log(`  - Create connection: POST /proxy/websocket with {"url": "ws://example.com"}`);
+  console.log(`  - Send message: PUT /proxy/websockets with {"uuid": "UUID-WS-...", "message": "base64encodedmessage"}`);
+  console.log(`Messages from server will be queued to Firebase at /websockets/{uuid} as base64`);
 });
