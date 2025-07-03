@@ -95,6 +95,8 @@ app.all("/proxy", async (req, res) => {
   try {
     const { method, url, headers: clientHeaders = {}, body: clientBody } = req.body;
     
+    console.log(`${method} ${url}`);
+    
     if (!method || !url) return res.status(400).send('Missing "method" or "url" in request body');
     if (url.startsWith(`${req.protocol}://${req.get("host")}`)) return res.status(400).send("Proxying to self is not allowed");
     
@@ -134,6 +136,7 @@ app.all("/proxy", async (req, res) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     
+    console.log(`Fetching: ${url}`);
     const fetchResponse = await fetch(url, {
       method: upperMethod,
       headers: forwardHeaders,
@@ -142,6 +145,7 @@ app.all("/proxy", async (req, res) => {
       signal: controller.signal,
     });
     
+    console.log(`Response status: ${fetchResponse.status}`);
     clearTimeout(timeoutId);
     
     res.status(fetchResponse.status);
@@ -155,18 +159,29 @@ app.all("/proxy", async (req, res) => {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, CONNECT");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     
+    // Handle response body - node-fetch v2 compatible
+    let responseBody;
+    const contentType = fetchResponse.headers.get('content-type') || '';
+    
+    if (contentType.includes('application/json')) {
+      responseBody = await fetchResponse.json();
+    } else if (contentType.includes('text/') || contentType.includes('application/xml')) {
+      responseBody = await fetchResponse.text();
+    } else {
+      // For binary data or unknown types, use arrayBuffer
+      const arrayBuffer = await fetchResponse.arrayBuffer();
+      responseBody = Buffer.from(arrayBuffer);
+    }
+    
     if (upperMethod === "GET") {
-      const buffer = await fetchResponse.buffer();
       cache.set(url, {
         status: fetchResponse.status,
         headers: Object.fromEntries(fetchResponse.headers.entries()),
-        body: buffer,
+        body: responseBody,
       });
-      res.send(buffer);
-    } else {
-      const buffer = await fetchResponse.buffer();
-      res.send(buffer);
     }
+    
+    res.send(responseBody);
     
   } catch (err) {
     if (err.name === "AbortError") return res.status(504).send("Upstream request timed out");
