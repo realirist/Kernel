@@ -30,8 +30,8 @@ app.use(cors());
 app.use(express.json());
 app.options("/proxy", (req, res) => res.sendStatus(204));
 
-const getBrowserHeaders = () => ({
-  'User-Agent': 'Kernel',
+const getBrowserHeaders = (userAgent = 'Kernel') => ({
+  'User-Agent': userAgent,
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'DNT': '1',
@@ -363,7 +363,10 @@ app.all("/proxy", async (req, res) => {
   try {
     const { method, url, headers: clientHeaders = {}, body: clientBody } = req.body;
     
-    console.log(`${method} ${url}`);
+    // Get UserAgent from query parameters, default to 'Kernel' if not present or blank
+    const userAgent = req.query.UserAgent || 'Kernel';
+    
+    console.log(`${method} ${url} (UserAgent: ${userAgent})`);
     
     if (!method || !url) return res.status(400).send('Missing "method" or "url" in request body');
     if (url.startsWith(`${req.protocol}://${req.get("host")}`)) return res.status(400).send("Proxying to self is not allowed");
@@ -390,7 +393,7 @@ app.all("/proxy", async (req, res) => {
       return res.status(cached.status).send(cached.body);
     }
     
-    const browserHeaders = getBrowserHeaders();
+    const browserHeaders = getBrowserHeaders(userAgent);
     const forwardHeaders = {};
     Object.entries(browserHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
     Object.entries(clientHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
@@ -465,4 +468,5 @@ server.listen(PORT, () => {
   console.log(`  - Create connection: POST /proxy/websocket with {"url": "ws://example.com"}`);
   console.log(`  - Send message: PUT /proxy/websockets with {"uuid": "UUID-WS-...", "message": "base64encodedmessage"}`);
   console.log(`Messages from server will be queued to Firebase at /websockets/{uuid} as base64`);
+  console.log(`UserAgent parameter: Add ?UserAgent=YourUserAgent to /proxy (defaults to 'Kernel')`);
 });
