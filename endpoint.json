@@ -2,13 +2,31 @@
   "global": {
     "changelogs": " [ + ] Added hookfunction",
     "inservice": [
-      "windows"
+      "windows",
+      "ios",
+      "macos",
+      "android"
     ]
   },
   "windows": {
     "product": "Kernel",
     "exploit_version": "2.0",
     "roblox_version": "version-765338e04cf54fde"
+  },
+  "ios": {
+    "product": "Kernel",
+    "exploit_version": "2.0",
+    "roblox_version": "version-2.679.761"
+  },
+  "macos": {
+    "product": "Kernel",
+    "exploit_version": "2.0",
+    "roblox_version": "version-300bbcf94efc463b"
+  },
+  "android": {
+    "product": "Kernel",
+    "exploit_version": "2.0",
+    "roblox_version": "version-2.681.805"
   },
   "roblox_version": "version-765338e04cf54fde"
 }
