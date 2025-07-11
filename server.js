@@ -405,7 +405,7 @@ app.all("/proxy", async (req, res) => {
     }
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
     
     console.log(`Fetching: ${url}`);
     const fetchResponse = await fetch(url, {
