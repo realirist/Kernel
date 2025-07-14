@@ -31,7 +31,7 @@ app.use(express.json());
 app.options("/proxy", (req, res) => res.sendStatus(204));
 
 const getBrowserHeaders = (userAgent = 'Kernel') => ({
-  'User-Agent': userAgent,
+  'User-Agent': req.query.UserAgent || 'Kernel';,
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'DNT': '1',
@@ -364,9 +364,8 @@ app.all("/proxy", async (req, res) => {
     const { method, url, headers: clientHeaders = {}, body: clientBody } = req.body;
     
     // Get UserAgent from query parameters, default to 'Kernel' if not present or blank
-    const userAgent = req.query.UserAgent || 'Kernel';
     
-    console.log(`${method} ${url} (UserAgent: ${userAgent})`);
+    console.log(`${method} ${url} (UserAgent: ${req.query.UserAgent || 'Kernel';})`);
     
     if (!method || !url) return res.status(400).send('Missing "method" or "url" in request body');
     if (url.startsWith(`${req.protocol}://${req.get("host")}`)) return res.status(400).send("Proxying to self is not allowed");
@@ -393,7 +392,7 @@ app.all("/proxy", async (req, res) => {
       return res.status(cached.status).send(cached.body);
     }
     
-    const browserHeaders = getBrowserHeaders(userAgent);
+    const browserHeaders = getBrowserHeaders(req.query.UserAgent || 'Kernel';);
     const forwardHeaders = {};
     Object.entries(browserHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
     Object.entries(clientHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
