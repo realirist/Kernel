@@ -31,7 +31,7 @@ app.use(express.json());
 app.options("/proxy", (req, res) => res.sendStatus(204));
 
 const getBrowserHeaders = (userAgent = 'Kernel') => ({
-  'User-Agent': req.query.UserAgent || 'Kernel',
+  'User-Agent': userAgent,
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'DNT': '1',
