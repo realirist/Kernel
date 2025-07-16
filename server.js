@@ -359,13 +359,19 @@ const handleConnect = (req, res, target) => {
   });
 };
 
+// Create a cache key that includes both URL and UserAgent
+const createCacheKey = (url, userAgent) => {
+  return `${url}|${userAgent || 'Kernel'}`;
+};
+
 app.all("/proxy", async (req, res) => {
   try {
     const { method, url, headers: clientHeaders = {}, body: clientBody } = req.body;
     
     // Get UserAgent from query parameters, default to 'Kernel' if not present or blank
+    const userAgent = req.query.UserAgent || 'Kernel';
     
-    console.log(`${method} ${url} (UserAgent: ${req.query.UserAgent || 'Kernel'})`);
+    console.log(`${method} ${url} (UserAgent: ${userAgent})`);
     
     if (!method || !url) return res.status(400).send('Missing "method" or "url" in request body');
     if (url.startsWith(`${req.protocol}://${req.get("host")}`)) return res.status(400).send("Proxying to self is not allowed");
@@ -385,14 +391,16 @@ app.all("/proxy", async (req, res) => {
       }
     }
     
-    // Handle caching for GET requests
-    if (upperMethod === "GET" && cache.has(url)) {
-      const cached = cache.get(url);
+    // Handle caching for GET requests - now includes UserAgent in cache key
+    const cacheKey = createCacheKey(url, userAgent);
+    if (upperMethod === "GET" && cache.has(cacheKey)) {
+      const cached = cache.get(cacheKey);
+      console.log(`Cache hit for ${url} with UserAgent: ${userAgent}`);
       res.set(cached.headers);
       return res.status(cached.status).send(cached.body);
     }
     
-    const browserHeaders = getBrowserHeaders(req.query.UserAgent || 'Kernel');
+    const browserHeaders = getBrowserHeaders(userAgent);
     const forwardHeaders = {};
     Object.entries(browserHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
     Object.entries(clientHeaders).forEach(([k, v]) => forwardHeaders[k] = v);
@@ -443,12 +451,14 @@ app.all("/proxy", async (req, res) => {
       responseBody = Buffer.from(arrayBuffer);
     }
     
+    // Cache GET requests with UserAgent-specific cache key
     if (upperMethod === "GET") {
-      cache.set(url, {
+      cache.set(cacheKey, {
         status: fetchResponse.status,
         headers: Object.fromEntries(fetchResponse.headers.entries()),
         body: responseBody,
       });
+      console.log(`Cached response for ${url} with UserAgent: ${userAgent}`);
     }
     
     res.send(responseBody);
@@ -468,4 +478,5 @@ server.listen(PORT, () => {
   console.log(`  - Send message: PUT /proxy/websockets with {"uuid": "UUID-WS-...", "message": "base64encodedmessage"}`);
   console.log(`Messages from server will be queued to Firebase at /websockets/{uuid} as base64`);
   console.log(`UserAgent parameter: Add ?UserAgent=YourUserAgent to /proxy (defaults to 'Kernel')`);
+  console.log(`Cache now includes UserAgent in cache key for proper isolation`);
 });
